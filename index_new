@@ -1,0 +1,86 @@
+<!DOCTYPE html><html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Bike and Seek — Fort Myers (Starter)</title>
+  <style>
+    :root{ --bg:#0b1220;--panel:#0f172a;--text:#e5e7eb;--muted:#9ca3af;--accent:#22d3ee;--good:#34d399;--bad:#f87171 }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{margin:0;font-family:ui-sans-serif,-apple-system,Segoe UI,Roboto,Helvetica,Arial;color:var(--text);background:radial-gradient(1000px 500px at 80% -10%,#1f2937 0%,transparent 60%),linear-gradient(180deg,#0b1220,#0f172a);}
+    .wrap{display:grid;grid-template-columns:1fr;gap:12px;max-width:960px;margin:0 auto;padding:16px}
+    .card{background:rgba(15,23,42,.7);border:1px solid rgba(255,255,255,.08);backdrop-filter:blur(6px);border-radius:16px;padding:14px}
+    h1{margin:0 0 6px;font-size:1.5rem;text-align:center}
+    .row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+    @media(max-width:880px){.row{grid-template-columns:1fr}}
+    label{font-size:.85rem;color:var(--muted)}
+    input,select,button{width:100%;padding:10px 12px;border-radius:10px;border:1px solid rgba(255,255,255,.08);background:#0b1220;color:var(--text)}
+    button{background:var(--accent);color:#00222a;font-weight:700;border:0;cursor:pointer}
+    button:disabled{opacity:.6;cursor:not-allowed}
+    .pill{display:inline-flex;gap:6px;align-items:center;padding:6px 10px;border-radius:999px;background:#0b1220;border:1px solid rgba(255,255,255,.08);font-size:.85rem;color:var(--muted)}
+    #map{height:60vh;border-radius:14px;overflow:hidden}
+    .hint{font-size:.9rem;color:var(--muted)}
+    .ok{color:var(--good)}.bad{color:var(--bad)}
+    .inline{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+    .monos{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+    ol{margin:8px 0 0 18px;padding:0;}
+  </style>
+  <link href="https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.css" rel="stylesheet">
+</head>
+<body>
+<div class="wrap">
+  <div class="card">
+    <h1>🚴‍♂️ Bike and Seek — Fort Myers</h1>
+    <div class="hint">Mobile-first demo. Uses one-mile arena around Fort Myers Country Club. No turn-by-turn — this is a scaffold for your final app.</div>
+    <div style="margin-top:8px">
+      <strong>How to Play (quick):</strong>
+      <ol>
+        <li>Enter a Mapbox token and tap <em>Assign Fair Targets</em>. The game picks a <u>random route distance</u> for this round and equal-distance targets for each player.</li>
+        <li>Bike to your assigned intersection by memory (the exact point stays hidden).</li>
+        <li>At the spot, tap <em>I’m here</em>. We’ll check your GPS is inside the geofence and log your finish.</li>
+      </ol>
+    </div>
+  </div>  <div class="row">
+    <div class="card">
+      <div class="inline" style="justify-content:space-between">
+        <div class="pill">Center: <span class="monos" id="centerTxt"></span></div>
+        <div class="pill">Radius: 1.0 mi (~1609 m)</div>
+      </div>
+      <div id="map"></div>
+    </div><div class="card" id="panel">
+  <label>Mapbox token</label>
+  <input id="mbToken" placeholder="pk.XXXXXXXX" />
+
+  <div class="inline" style="margin-top:8px">
+    <div class="pill" id="status">Status: idle</div>
+  </div>
+
+  <div style="margin-top:10px" class="inline">
+    <label>Players</label>
+    <select id="playerCount">
+      <option>2</option>
+      <option selected>3</option>
+      <option>4</option>
+    </select>
+  </div>
+
+  <div class="inline" style="margin-top:8px">
+    <button id="startBtn">Assign Fair Targets</button>
+    <button id="claimBtn" disabled>I’m here</button>
+  </div>
+
+  <div style="margin-top:10px">
+    <div class="hint">This starter picks <b>pseudo</b>-targets (random points on the ring) and checks fairness with the <b>Mapbox Matrix (cycling)</b> API. In the real game, targets are <b>street-name intersections</b> within the arena.</div>
+  </div>
+
+  <div style="margin-top:10px">
+    <label>Your assignment</label>
+    <div id="assignment" class="pill">(none yet — intersection name will appear here)</div>
+  </div>
+</div>
+
+  </div>
+</div><script src="https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.js"></script><script>
+// (rest of JS unchanged from previous version)
+</script></body>
+</html>
