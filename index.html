@@ -1,0 +1,262 @@
+<!DOCTYPE html><html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Hide & Seek — Fort Myers (Starter)</title>
+  <style>
+    :root{
+      --bg:#0b1220;--panel:#0f172a;--text:#e5e7eb;--muted:#9ca3af;--accent:#22d3ee;--good:#34d399;--bad:#f87171
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{margin:0;font-family:ui-sans-serif,-apple-system,Segoe UI,Roboto,Helvetica,Arial;color:var(--text);background:radial-gradient(1000px 500px at 80% -10%,#1f2937 0%,transparent 60%),linear-gradient(180deg,#0b1220,#0f172a);}
+    .wrap{display:grid;grid-template-columns:1fr;gap:12px;max-width:960px;margin:0 auto;padding:16px}
+    .card{background:rgba(15,23,42,.7);border:1px solid rgba(255,255,255,.08);backdrop-filter:blur(6px);border-radius:16px;padding:14px}
+    h1{margin:0 0 6px;font-size:1.25rem}
+    .row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+    @media(max-width:880px){.row{grid-template-columns:1fr}}
+    label{font-size:.85rem;color:var(--muted)}
+    input,select,button{width:100%;padding:10px 12px;border-radius:10px;border:1px solid rgba(255,255,255,.08);background:#0b1220;color:var(--text)}
+    button{background:var(--accent);color:#00222a;font-weight:700;border:0;cursor:pointer}
+    button:disabled{opacity:.6;cursor:not-allowed}
+    .pill{display:inline-flex;gap:6px;align-items:center;padding:6px 10px;border-radius:999px;background:#0b1220;border:1px solid rgba(255,255,255,.08);font-size:.85rem;color:var(--muted)}
+    #map{height:60vh;border-radius:14px;overflow:hidden}
+    .hint{font-size:.9rem;color:var(--muted)}
+    .ok{color:var(--good)}.bad{color:var(--bad)}
+    .inline{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+    .monos{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+  </style>
+  <link href="https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.css" rel="stylesheet">
+</head>
+<body>
+<div class="wrap">
+  <div class="card">
+    <h1>Hide & Seek — Fort Myers (Starter)</h1>
+    <div class="hint">Mobile-first demo. Uses one-mile arena around Fort Myers Country Club. No turn-by-turn — this is a scaffold for your final app.</div>
+  </div>  <div class="row">
+    <div class="card">
+      <div class="inline" style="justify-content:space-between">
+        <div class="pill">Center: <span class="monos" id="centerTxt"></span></div>
+        <div class="pill">Radius: 1.0 mi (~1609 m)</div>
+      </div>
+      <div id="map"></div>
+    </div><div class="card" id="panel">
+  <label>Mapbox token</label>
+  <input id="mbToken" placeholder="pk.XXXXXXXX" />
+
+  <div class="inline" style="margin-top:8px">
+    <div class="pill" id="status">Status: idle</div>
+  </div>
+
+  <div style="margin-top:10px" class="inline">
+    <label>Players</label>
+    <select id="playerCount">
+      <option>2</option>
+      <option selected>3</option>
+      <option>4</option>
+    </select>
+    <label>Target route distance</label>
+    <select id="targetMi">
+      <option value="0.9">0.9 mi</option>
+      <option value="1.0" selected>1.0 mi</option>
+      <option value="1.1">1.1 mi</option>
+      <option value="1.2">1.2 mi</option>
+    </select>
+  </div>
+
+  <div class="inline" style="margin-top:8px">
+    <button id="startBtn">Assign Fair Targets</button>
+    <button id="claimBtn" disabled>I’m here</button>
+  </div>
+
+  <div style="margin-top:10px">
+    <div class="hint">This starter picks <b>pseudo</b>-targets (random points snapped to the ring) and checks fairness using the <b>Mapbox Matrix (cycling)</b> API. Replace with your intersection list later.</div>
+  </div>
+
+  <div style="margin-top:10px">
+    <label>Your assignment</label>
+    <div id="assignment" class="pill">(none yet)</div>
+  </div>
+</div>
+
+  </div>
+</div><script src="https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.js"></script><script>
+// === Config (Fort Myers Country Club) ===
+const CENTER = { lat: 26.610873, lon: -81.884811 }; // 3591 McGregor Blvd
+const RADIUS_M = 1609.34;             // 1 mile
+const FAIR_BAND = 0.15;               // ±15%
+const MIN_SEPARATION_M = 160;         // spacing between player targets
+const CLAIM_GEOFENCE_M = 35;          // ease-of-use geofence
+
+const centerTxt = document.getElementById('centerTxt');
+centerTxt.textContent = `${CENTER.lat.toFixed(6)}, ${CENTER.lon.toFixed(6)}`;
+
+// Haversine distance (m)
+function distM(a,b){
+  const toRad = x=> x*Math.PI/180;
+  const R=6371000;
+  const dLat=toRad(b.lat-a.lat); const dLon=toRad(b.lon-a.lon);
+  const lat1=toRad(a.lat), lat2=toRad(b.lat);
+  const s=Math.sin(dLat/2)**2 + Math.cos(lat1)*Math.cos(lat2)*Math.sin(dLon/2)**2;
+  return 2*R*Math.asin(Math.sqrt(s));
+}
+
+// Point on circle from center, radius (m), bearing (deg)
+function pointOnCircle(center, radiusM, bearingDeg){
+  const R=6371000;
+  const br = bearingDeg*Math.PI/180;
+  const lat1 = center.lat*Math.PI/180;
+  const lon1 = center.lon*Math.PI/180;
+  const lat2 = Math.asin(Math.sin(lat1)*Math.cos(radiusM/R) + Math.cos(lat1)*Math.sin(radiusM/R)*Math.cos(br));
+  const lon2 = lon1 + Math.atan2(Math.sin(br)*Math.sin(radiusM/R)*Math.cos(lat1), Math.cos(radiusM/R)-Math.sin(lat1)*Math.sin(lat2));
+  return { lat: lat2*180/Math.PI, lon: lon2*180/Math.PI };
+}
+
+// Random candidates spaced around the ring — placeholder for real intersections
+function ringCandidates(n){
+  const out=[]; const used=[];
+  while(out.length<n){
+    const bearing = Math.floor(Math.random()*360);
+    // avoid very close bearings
+    if (used.some(b=> Math.abs(((b-bearing+540)%360)-180) < 18)) continue; // ~36° min spread
+    used.push(bearing);
+    out.push({ id: `cand_${bearing}`, bearing, ...pointOnCircle(CENTER, RADIUS_M*0.95, bearing) });
+  }
+  return out;
+}
+
+// Map bootstrap (after token provided)
+let map, centerMarker, circleLayerAdded=false, targetMarker, assignedTarget=null;
+
+function initMap(token){
+  mapboxgl.accessToken = token;
+  map = new mapboxgl.Map({
+    container: 'map', style: 'mapbox://styles/mapbox/dark-v11',
+    center: [CENTER.lon, CENTER.lat], zoom: 14
+  });
+  map.addControl(new mapboxgl.NavigationControl(), 'top-right');
+  map.on('load', ()=>{
+    // Center marker
+    centerMarker = new mapboxgl.Marker({color:'#22d3ee'})
+      .setLngLat([CENTER.lon, CENTER.lat])
+      .setPopup(new mapboxgl.Popup().setHTML('<b>Center</b><br/>Fort Myers CC'))
+      .addTo(map);
+
+    // Circle source/layer
+    const circleGeo = circlePolygon([CENTER.lon, CENTER.lat], RADIUS_M, 64);
+    map.addSource('arena', { type:'geojson', data: circleGeo });
+    map.addLayer({ id:'arena-fill', type:'fill', source:'arena', paint: { 'fill-color':'#22d3ee', 'fill-opacity':0.08 }});
+    map.addLayer({ id:'arena-line', type:'line', source:'arena', paint: { 'line-color':'#22d3ee', 'line-width':2, 'line-opacity':0.5 }});
+    circleLayerAdded=true;
+  });
+}
+
+// Build a circle polygon GeoJSON (approx)
+function circlePolygon(centerLonLat, radiusM, points){
+  const [lon, lat] = centerLonLat;
+  const coords=[]; for(let i=0;i<=points;i++){ const b=i*(360/points); const p=pointOnCircle({lat,lon}, radiusM, b); coords.push([p.lon, p.lat]); }
+  return { type:'FeatureCollection', features:[{ type:'Feature', properties:{}, geometry:{ type:'Polygon', coordinates:[coords] } }] };
+}
+
+// Mapbox Matrix (cycling) distances from center to many candidates
+async function matrixDistances(token, candidates){
+  const coords = [[CENTER.lon, CENTER.lat], ...candidates.map(c=>[c.lon,c.lat])]
+      .map(x=>x.join(',')).join(';');
+  const url = `https://api.mapbox.com/directions-matrix/v1/mapbox/cycling/${coords}?annotations=distance&access_token=${encodeURIComponent(token)}`;
+  const r = await fetch(url);
+  if(!r.ok) throw new Error('Matrix API error');
+  const data = await r.json();
+  // distances is rows x cols (origins x destinations). Our origin index 0 to all others.
+  const row0 = data.distances[0];
+  // slice off origin->origin
+  return row0.slice(1);
+}
+
+function setStatus(s){ document.getElementById('status').textContent = `Status: ${s}`; }
+
+async function assignFairTargets(){
+  const token = document.getElementById('mbToken').value.trim();
+  if(!token){ alert('Enter your Mapbox token (pk.*) first.'); return; }
+  if(!map){ initMap(token); }
+
+  setStatus('picking candidates…');
+  const playerCount = parseInt(document.getElementById('playerCount').value,10);
+  const targetMi = parseFloat(document.getElementById('targetMi').value);
+  const targetM = targetMi * 1609.34;
+
+  const candidates = ringCandidates(Math.max(6, playerCount*3));
+  let distances;
+  try{
+    distances = await matrixDistances(token, candidates);
+  }catch(e){ console.error(e); alert('Matrix API failed. Check token / CORS.'); setStatus('error'); return; }
+
+  // Filter by fairness band
+  const minD = targetM*(1-FAIR_BAND), maxD = targetM*(1+FAIR_BAND);
+  let pool = candidates.map((c,i)=>({...c, routeM: distances[i]}))
+                       .filter(p=> p.routeM && p.routeM>=minD && p.routeM<=maxD)
+                       .sort((a,b)=>a.routeM-b.routeM);
+  // Pick spaced targets
+  const picks=[];
+  for(const p of pool){
+    if (picks.every(q=> distM(p, q) >= MIN_SEPARATION_M)) picks.push(p);
+    if (picks.length===playerCount) break;
+  }
+  if (picks.length<playerCount){
+    setStatus('not enough fair candidates (try 0.9 or 1.1 mi)');
+  } else {
+    setStatus(`assigned ${picks.length} targets`);
+  }
+
+  // For this starter, we assume "you" are Player 1
+  assignedTarget = picks[0] || null;
+  const a = document.getElementById('assignment');
+  if(assignedTarget){
+    a.textContent = `Target ~${(assignedTarget.routeM/1609.34).toFixed(2)} mi @ bearing ${assignedTarget.bearing}° (hidden on map)`;
+    document.getElementById('claimBtn').disabled = false;
+    // Optional: hide exact target to respect no-navigation rule. If you want to preview, drop a marker:
+    if (targetMarker) targetMarker.remove();
+    // targetMarker = new mapboxgl.Marker({color:'#f59e0b'}).setLngLat([assignedTarget.lon, assignedTarget.lat]).addTo(map);
+  } else {
+    a.textContent = '(no assignment)';
+    document.getElementById('claimBtn').disabled = true;
+  }
+}
+
+async function claimHere(){
+  if (!assignedTarget) return alert('No target assigned yet.');
+  setStatus('checking location…');
+  const opts = { enableHighAccuracy:true, timeout:10000, maximumAge:0 };
+  navigator.geolocation.getCurrentPosition((pos)=>{
+    const { latitude, longitude, accuracy, speed } = pos.coords;
+    const you = { lat: latitude, lon: longitude };
+    const d = distM(you, assignedTarget);
+    const okAccuracy = (accuracy||50) <= 30; // ease-of-use; tweak later
+    const okRadius = d <= CLAIM_GEOFENCE_M;
+    const okSpeed = (speed==null) || speed <= 3.0; // ~10.8 km/h at claim
+
+    const a = document.getElementById('assignment');
+    if (okAccuracy && okRadius && okSpeed){
+      a.innerHTML = `<span class="ok">✔ Arrived</span> — within ${(d).toFixed(1)} m (acc ~${Math.round(accuracy||0)} m)`;
+      setStatus('finish recorded (local demo)');
+      // TODO: send to server & notify others
+    } else {
+      const msgs = [];
+      if(!okAccuracy) msgs.push('GPS accuracy low');
+      if(!okRadius) msgs.push(`outside geofence (${d.toFixed(1)} m)`);
+      if(!okSpeed) msgs.push('still moving too fast');
+      a.innerHTML = `<span class="bad">✖ Not yet</span> — ${msgs.join(', ')}`;
+      setStatus('claim rejected');
+    }
+  }, (err)=>{
+    console.warn(err); setStatus('location error'); alert('Could not get location. Try again outdoors.');
+  }, opts);
+}
+
+// Wire up UI
+const startBtn = document.getElementById('startBtn');
+startBtn.addEventListener('click', assignFairTargets);
+
+document.getElementById('claimBtn').addEventListener('click', claimHere);
+
+</script></body>
+</html>
